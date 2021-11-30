@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:zurichat/app/app.locator.dart';
-import 'package:zurichat/services/local_storage_services.dart';
-import 'package:zurichat/ui/view/dm_user/dummy_data/models/message.dart';
-import 'package:zurichat/ui/view/dm_user/dummy_data/models/user.dart';
+import 'package:zurichat/models/dm_model.dart';
+import 'package:zurichat/models/message.dart';
+import 'package:zurichat/models/user.dart';
+import 'package:zurichat/services/app_services/local_storage_services.dart';
+import 'package:zurichat/services/messaging_services/centrifuge_rtc_service.dart';
+import 'package:zurichat/services/messaging_services/dms_api_service.dart';
 import 'package:zurichat/utilities/enums.dart';
-import 'package:zurichat/utilities/storage_keys.dart';
+import 'package:zurichat/utilities/constants/storage_keys.dart';
 import 'package:stacked/stacked.dart';
 import 'package:stacked_services/stacked_services.dart';
 import 'package:zurichat/app/app.logger.dart';
@@ -14,7 +17,14 @@ import 'package:zurichat/app/app.logger.dart';
 class DmUserViewModel extends FormViewModel {
   final navigationService = locator<NavigationService>();
   final _storageService = locator<SharedPreferenceLocalStorage>();
-
+  final _dmApiService = locator<DMApiService>();
+  final _snackbarService = locator<SnackbarService>();
+  List<DmModel> dmUserMessage = [];
+  String userID = '';
+  String friendID = '';
+  String roomID = '';
+  final _centrifugeService = locator<CentrifugeService>();
+  StreamSubscription? messageSubscription;
   //**Draft implementations
 
   //Note that the receiverID has to be unique to a dm_user_view
@@ -24,12 +34,10 @@ class DmUserViewModel extends FormViewModel {
   var storedDraft = '';
 
   void getDraft(receiverId) {
-    var currentOrgId =
-    _storageService.getString(StorageKeys.currentOrgId);
-    var currentUserId =
-    _storageService.getString(StorageKeys.currentUserId);
+    var currentOrgId = _storageService.getString(StorageKeys.currentOrgId);
+    var currentUserId = _storageService.getString(StorageKeys.currentUserId);
     List<String>? spList =
-    _storageService.getStringList(StorageKeys.currentUserDmIdDrafts);
+        _storageService.getStringList(StorageKeys.currentUserDmIdDrafts);
     if (spList != null) {
       for (String e in spList) {
         if (jsonDecode(e)['receiverId'] == receiverId &&
@@ -46,10 +54,8 @@ class DmUserViewModel extends FormViewModel {
   }
 
   void storeDraft(receiverId, value) {
-    var currentOrgId =
-    _storageService.getString(StorageKeys.currentOrgId);
-    var currentUserId =
-    _storageService.getString(StorageKeys.currentUserId);
+    var currentOrgId = _storageService.getString(StorageKeys.currentOrgId);
+    var currentUserId = _storageService.getString(StorageKeys.currentUserId);
     var keyMap = {
       'draft': value,
       'time': '${DateTime.now()}',
@@ -60,7 +66,7 @@ class DmUserViewModel extends FormViewModel {
     };
 
     List<String>? spList =
-    _storageService.getStringList(StorageKeys.currentUserDmIdDrafts);
+        _storageService.getStringList(StorageKeys.currentUserDmIdDrafts);
 
     if (value.length > 0 && spList != null) {
       spList.add(json.encode(keyMap));
@@ -138,7 +144,7 @@ class DmUserViewModel extends FormViewModel {
       await storage.setString(messageID, json.encode(savedMessageMap));
       log.i(savedMessageMap);
       final len = storage.getStringList(StorageKeys.savedItem);
-      log.w(len!.length.toString());
+      log.wtf(len!.length.toString());
     }
   }
 
@@ -149,23 +155,36 @@ class DmUserViewModel extends FormViewModel {
     notifyListeners();
   }
 
-  Future<void> sendMessage() async {
-    // if(messageController.text!=null){
-    final message = messageController.text;
-    if (message.trim().isNotEmpty) {
+  Future<void> sendMessage(String text) async {
+    if (text.trim().isNotEmpty) {
       chatMessages.add(
         Message(
           id: chatMessages.length,
           sender: sender,
-          message: message,
+          message: text,
           time: DateTime.now(),
         ),
       );
-
+      String memberID =
+          _storageService.getString(StorageKeys.idInOrganization).toString();
+      var res = await _dmApiService.sendDMs(roomID, memberID, text);
       messageController.clear();
 
       notifyListeners();
+      if (res == 201) {
+        _snackbarService.showCustomSnackBar(
+            duration: const Duration(seconds: 2),
+            message: "Message Sent",
+            variant: SnackbarType.success);
+      } else {
+        _snackbarService.showCustomSnackBar(
+            duration: const Duration(seconds: 2),
+            message: "Sending failed",
+            variant: SnackbarType.failure);
+      }
     }
+    fetchMessages();
+    notifyListeners();
   }
 
   void deleteMessage(Message message) {
@@ -183,17 +202,8 @@ class DmUserViewModel extends FormViewModel {
     navigationService.popRepeated(1);
   }
 
-  void sendResponse() async {
-    await Future.delayed(const Duration(seconds: 0));
-    final randomNum = Random().nextInt(Message.responses().length);
-    chatMessages.add(
-      Message(
-        id: chatMessages.length,
-        sender: receiver,
-        message: Message.responses()[randomNum],
-        time: DateTime.now(),
-      ),
-    );
+  Future fetchMessages() async {
+    dmUserMessage = await _dmApiService.getRoomMessages(roomID);
     notifyListeners();
   }
 
@@ -233,5 +243,37 @@ class DmUserViewModel extends FormViewModel {
 
   void exit() {
     navigationService.back();
+  }
+
+  void initialiseRoom(String friendId) async {
+    friendID = friendId;
+
+    await createRoom();
+    await fetchMessages();
+  }
+
+  Future createRoom() async {
+    userID = _storageService.getString(StorageKeys.currentUserId).toString();
+    String dmKey = 'DM' + userID + friendID;
+    String id = _storageService.getString(dmKey).toString();
+    if (id != 'null') {
+      roomID = id;
+    } else {
+      roomID = await _dmApiService.roomCreator(friendID);
+      _storageService.setString(dmKey, roomID);
+    }
+  }
+
+  void listenToNewMessage(String channelId) async {
+    String dmSocketID = roomID;
+
+    messageSubscription = _centrifugeService.listenDM(
+      socketId: dmSocketID,
+      roomID: roomID,
+      onData: (message) {
+        fetchMessages();
+        notifyListeners();
+      },
+    );
   }
 }

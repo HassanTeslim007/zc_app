@@ -1,13 +1,15 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:zurichat/constants/app_strings.dart';
-import 'package:zurichat/general_widgets/no_connection_widget.dart';
+import 'package:flutter_svg/svg.dart';
+import 'package:zurichat/utilities/constants/app_strings.dart';
+import 'package:zurichat/ui/shared/dumb_widgets/no_connection_widget.dart';
 import 'package:zurichat/models/channel_model.dart';
-import 'package:zurichat/ui/shared/zuri_appbar.dart';
+import 'package:zurichat/ui/shared/dumb_widgets/zuri_appbar.dart';
 import 'package:zurichat/ui/view/channel/channel_view/widgets/channel_intro.dart';
 import 'package:zurichat/ui/view/expandable_textfield/expandable_textfield_screen.dart';
 import 'package:stacked/stacked.dart';
 import 'package:stacked/stacked_annotations.dart';
+import 'package:zurichat/utilities/internationalization/app_localization.dart';
 import '../../../shared/shared.dart';
 
 import 'channel_page_viewmodel.dart';
@@ -34,6 +36,7 @@ class ChannelPageView extends StatelessWidget with $ChannelPageView {
 
   @override
   Widget build(BuildContext context) {
+    final local = AppLocalization.of(context);
     return ViewModelBuilder<ChannelPageViewModel>.reactive(
       onModelReady: (model) {
         model.getDraft(channelId);
@@ -57,7 +60,7 @@ class ChannelPageView extends StatelessWidget with $ChannelPageView {
                 channelId,
                 channelMessagesController.text,
                 channelName,
-                membersCount,
+                model.channelMembers.length,
                 public),
             whiteBackground: true,
             isDarkMode: Theme.of(context).brightness == Brightness.dark,
@@ -71,22 +74,33 @@ class ChannelPageView extends StatelessWidget with $ChannelPageView {
               //   ),
               // ),
               Padding(
-                padding: const EdgeInsets.only(right: 5),
-                child: IconButton(
-                  onPressed: () => model.navigateToChannelInfoScreen(
-                      membersCount!,
-                      ChannelModel(id: channelId!, name: channelName!),
-                      channelName!),
-                  icon: const Icon(
-                    Icons.info_outlined,
-                    color: AppColors.textLight10,
+                padding: const EdgeInsets.only(right: 15),
+                child: InkWell(
+                  onTap: () => model.deleteChannel(
+                    ChannelModel(id: channelId!, name: channelName!),
+                  ),
+                  child: SvgPicture.asset(
+                    Log_Out,
+                    color: AppColors.unreadMessageColor,
+                    width: 20,
+                    height: 20,
                   ),
                 ),
+                // child: IconButton(
+                //   onPressed: () => model.navigateToChannelInfoScreen(
+                //       membersCount!,
+                //       ChannelModel(id: channelId!, name: channelName!),
+                //       channelName!),
+                //   icon: const Icon(
+                //     Icons.info_outlined,
+                //     color: AppColors.textLight10,
+                //   ),
+                // ),
               ),
             ],
             title: "#$channelName",
             subtitle:
-                "${model.channelMembers.length} member${model.channelMembers.length == 1 ? "" : "s"}",
+                "${model.channelMembers.length} ${local!.member}${model.channelMembers.length == 1 ? "" : "${local.s}"}",
           ),
           body: ExpandableTextFieldScreen(
             usercheck: model.checkUser,
@@ -94,12 +108,12 @@ class ChannelPageView extends StatelessWidget with $ChannelPageView {
             channelId: '$channelId',
             channelID: channelId.toString(),
             textController: channelMessagesController,
-            hintText: AddReply,
-            sendMessage: model.sendOrUpdateMessage,
+            hintText: local.addAReply,
+            sendMessage: model.sendMessage,
             widget: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               controller: model.scrollController,
-              reverse: true,
+              reverse: false,
               child: Column(
                 children: [
                   ChannelIntro(

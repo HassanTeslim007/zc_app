@@ -3,23 +3,24 @@ import 'dart:convert';
 import 'package:zurichat/app/app.locator.dart';
 import 'package:zurichat/app/app.logger.dart';
 import 'package:zurichat/app/app.router.dart';
-import 'package:zurichat/constants/app_strings.dart';
+import 'package:zurichat/ui/view/jump_to_view/jump_to_view.dart';
+import 'package:zurichat/utilities/constants/app_strings.dart';
 import 'package:zurichat/models/channel_members.dart';
 import 'package:zurichat/models/channel_model.dart';
 import 'package:zurichat/models/user_model.dart';
-import 'package:zurichat/package/base/server-request/api/zuri_api.dart';
-import 'package:zurichat/package/base/server-request/channels/channels_api_service.dart';
-import 'package:zurichat/package/base/server-request/dms/dms_api_service.dart';
-import 'package:zurichat/services/centrifuge_service.dart';
-import 'package:zurichat/services/connectivity_service.dart';
-import 'package:zurichat/services/local_storage_services.dart';
-import 'package:zurichat/services/notification_service.dart';
-import 'package:zurichat/services/user_service.dart';
+import 'package:zurichat/utilities/api_handlers/zuri_api.dart';
+import 'package:zurichat/services/messaging_services/channels_api_service.dart';
+import 'package:zurichat/services/messaging_services/dms_api_service.dart';
+import 'package:zurichat/services/messaging_services/centrifuge_rtc_service.dart';
+import 'package:zurichat/services/app_services/connectivity_service.dart';
+import 'package:zurichat/services/app_services/local_storage_services.dart';
+import 'package:zurichat/services/app_services/notification_service.dart';
+import 'package:zurichat/services/in_review/user_service.dart';
 import 'package:zurichat/ui/nav_pages/home_page/home_item_model.dart';
-import 'package:zurichat/ui/view/dm_chat_view/dm_jump_to_view.dart';
-import 'package:zurichat/utilities/constants.dart';
+import 'package:zurichat/ui/view/general_search/general_search_view.dart';
+import 'package:zurichat/utilities/constants/app_constants.dart';
 import 'package:zurichat/utilities/enums.dart';
-import 'package:zurichat/utilities/storage_keys.dart';
+import 'package:zurichat/utilities/constants/storage_keys.dart';
 import 'package:stacked/stacked.dart';
 import 'package:stacked_services/stacked_services.dart';
 
@@ -89,11 +90,16 @@ class HomePageViewModel extends StreamViewModel {
   }
 
   void navigateToJumpToScreen() {
-    _navigationService.navigateTo(Routes.dmJumpToView);
+    _navigationService.navigateTo(Routes.jumpToView);
   }
 
   void navigateToStartDMScreen() {
     _navigationService.navigateTo(Routes.startDmView);
+  }
+
+  void navigateToGeneralSearchScreen() {
+    navigation.navigateWithTransition(GeneralSearchView(),
+        transition: NavigationTransition.Fade);
   }
 
   @override
@@ -270,7 +276,7 @@ class HomePageViewModel extends StreamViewModel {
   }
 
   void onJumpToScreen() {
-    navigation.navigateWithTransition(DmJumpToView(),
+    navigation.navigateWithTransition(JumpToView(),
         transition: NavigationTransition.DownToUp);
   }
 
@@ -293,10 +299,8 @@ class HomePageViewModel extends StreamViewModel {
   }
 
   bool hasDrafts() {
-    var currentOrgId =
-    storageService.getString(StorageKeys.currentOrgId);
-    var currentUserId =
-    storageService.getString(StorageKeys.currentUserId);
+    var currentOrgId = storageService.getString(StorageKeys.currentOrgId);
+    var currentUserId = storageService.getString(StorageKeys.currentUserId);
     var dmStoredDrafts =
         storageService.getStringList(StorageKeys.currentUserDmIdDrafts);
     var channelStoredDrafts =
@@ -307,8 +311,8 @@ class HomePageViewModel extends StreamViewModel {
 
     if (dmStoredDrafts != null) {
       dmStoredDrafts.forEach((element) {
-        if(currentOrgId == jsonDecode(element)['currentOrgId'] &&
-            currentUserId == jsonDecode(element)['currentUserId']){
+        if (currentOrgId == jsonDecode(element)['currentOrgId'] &&
+            currentUserId == jsonDecode(element)['currentUserId']) {
           counter++;
         }
       });
@@ -316,8 +320,8 @@ class HomePageViewModel extends StreamViewModel {
 
     if (channelStoredDrafts != null) {
       channelStoredDrafts.forEach((element) {
-        if(currentOrgId == jsonDecode(element)['currentOrgId'] &&
-            currentUserId == jsonDecode(element)['currentUserId']){
+        if (currentOrgId == jsonDecode(element)['currentOrgId'] &&
+            currentUserId == jsonDecode(element)['currentUserId']) {
           counter++;
         }
       });
@@ -325,8 +329,8 @@ class HomePageViewModel extends StreamViewModel {
 
     if (threadStoredDrafts != null) {
       threadStoredDrafts.forEach((element) {
-        if(currentOrgId == jsonDecode(element)['currentOrgId'] &&
-            currentUserId == jsonDecode(element)['currentUserId']){
+        if (currentOrgId == jsonDecode(element)['currentOrgId'] &&
+            currentUserId == jsonDecode(element)['currentUserId']) {
           counter++;
         }
       });

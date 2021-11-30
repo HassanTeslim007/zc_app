@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:zurichat/constants/app_strings.dart';
-import 'package:zurichat/ui/shared/colors.dart';
+import 'package:zurichat/utilities/constants/app_strings.dart';
+import 'package:zurichat/utilities/constants/colors.dart';
 import 'package:zurichat/ui/shared/shared.dart';
-import 'package:zurichat/ui/shared/text_styles.dart';
-import 'package:zurichat/ui/shared/zuri_loader.dart';
-import 'package:zurichat/utilities/internalization/localization/app_localization.dart';
+import 'package:zurichat/utilities/constants/text_styles.dart';
+import 'package:zurichat/ui/shared/dumb_widgets/zuri_loader.dart';
+import 'package:zurichat/utilities/internationalization/app_localization.dart';
 import 'package:modal_progress_hud_nsn/modal_progress_hud_nsn.dart';
 import 'package:stacked/stacked.dart';
 import 'package:stacked/stacked_annotations.dart';
@@ -19,7 +19,8 @@ import 'forgot_password_newviewmodel.dart';
 ])
 class ForgotPasswordNewView extends StatelessWidget
     with $ForgotPasswordNewView {
-  ForgotPasswordNewView({Key? key}) : super(key: key);
+  final String otp;
+  ForgotPasswordNewView({Key? key, required this.otp}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +32,6 @@ class ForgotPasswordNewView extends StatelessWidget
         color: AppColors.whiteColor,
         progressIndicator: const ZuriLoader(),
         child: Scaffold(
-          resizeToAvoidBottomInset: false,
           body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20.0, 20.0, 20.0, 0),
@@ -188,7 +188,7 @@ class ForgotPasswordNewView extends StatelessWidget
                         child: ElevatedButton(
                           onPressed: () {
                             // model.passwordVerification();
-                            model.resetPassword();
+                            model.resetPassword(otp);
                           },
                           child: Text(
                             local.continueButton,

@@ -1,24 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:zurichat/app/app.locator.dart';
 import 'package:zurichat/app/app.router.dart';
+import 'package:zurichat/utilities/constants/app_strings.dart';
 import 'package:zurichat/models/channel_members.dart';
 import 'package:zurichat/models/channel_model.dart';
 import 'package:zurichat/models/user_post.dart';
-import 'package:zurichat/package/base/server-request/api/zuri_api.dart';
-import 'package:zurichat/package/base/server-request/channels/channels_api_service.dart';
-import 'package:zurichat/services/centrifuge_service.dart';
-import 'package:zurichat/services/local_storage_services.dart';
-import 'package:zurichat/services/media_service.dart';
-import 'package:zurichat/services/notification_service.dart';
+import 'package:zurichat/utilities/api_handlers/zuri_api.dart';
+import 'package:zurichat/services/messaging_services/channels_api_service.dart';
+import 'package:zurichat/services/messaging_services/centrifuge_rtc_service.dart';
+import 'package:zurichat/services/app_services/local_storage_services.dart';
+import 'package:zurichat/services/app_services/media_service.dart';
+import 'package:zurichat/services/app_services/notification_service.dart';
 import 'package:zurichat/app/app.logger.dart';
-import 'package:zurichat/services/user_service.dart';
+import 'package:zurichat/services/in_review/user_service.dart';
 import 'package:zurichat/ui/shared/shared.dart';
 import 'package:zurichat/utilities/enums.dart';
-import 'package:zurichat/utilities/storage_keys.dart';
+import 'package:zurichat/utilities/constants/storage_keys.dart';
 import 'package:simple_moment/simple_moment.dart';
 import 'package:stacked/stacked.dart';
 import 'package:stacked_services/stacked_services.dart';
@@ -39,11 +39,12 @@ class ChannelPageViewModel extends FormViewModel {
 
   get checkUser => _checkUser;
   final _api = ZuriApi(channelsBaseUrl);
+  //TODO LUGIN ID - I GUESS THIS PLUGIN ID IS FOR UPLOADING PICTURES
   String pluginId = '6165f520375a4616090b8275';
+  final snackbar = locator<SnackbarService>();
 
-  //Draft implementations
+  //DRAFT IMPLEMENTATION
   var storedDraft = '';
-
   void getDraft(channelId) {
     var currentOrgId = _storageService.getString(StorageKeys.currentOrgId);
     var currentUserId = _storageService.getString(StorageKeys.currentUserId);
@@ -65,6 +66,7 @@ class ChannelPageViewModel extends FormViewModel {
     }
   }
 
+  // STORE MESSAGES IN DRAFTS
   void storeDraft(channelId, value, channelName, membersCount, public) {
     var currentOrgId = _storageService.getString(StorageKeys.currentOrgId);
     var currentUserId = _storageService.getString(StorageKeys.currentUserId);
@@ -111,6 +113,7 @@ class ChannelPageViewModel extends FormViewModel {
   String channelID = '';
   String channelCreator = '';
 
+  //ADD TO SAVED ITEMS
   saveItem(
       {String? channelID,
       String? channelName,
@@ -137,7 +140,7 @@ class ChannelPageViewModel extends FormViewModel {
       await storage.setString(messageID, json.encode(savedMessageMap));
       log.i(savedMessageMap);
       final len = storage.getStringList(StorageKeys.savedItem);
-      log.w(len!.length.toString());
+      log.wtf(len!.length.toString());
     }
   }
 
@@ -146,6 +149,7 @@ class ChannelPageViewModel extends FormViewModel {
     notifyListeners();
   }
 
+  // THE CHANNEL CREATOR
   getChannelCreator(String channelId) async {
     var response = await _channelsApiService.getChanelCreator(channelId);
     channelCreator = response['owner'];
@@ -157,17 +161,24 @@ class ChannelPageViewModel extends FormViewModel {
     notifyListeners();
   }
 
+  ///INITIALIZATION WHICH INCLUDES JOINING CHANNEL, FETCHING MESSAGES, 
+  ///LISTENING TO NEW MESSAGES, GETTING THE CHANNEL SOCKET ID AND GETTING THE CHANNEL CREATOR
   void initialise(String channelId) async {
+    storage.setString(StorageKeys.currentChannelId, channelId);
     channelID = channelId;
-    //TODO
-    // await joinChannel(channelId);
+
+    //TODO: join channel wasn't done
+    await joinChannel(channelId);
+
     fetchMessages(channelId);
     getChannelSocketId(channelId);
-    fetchChannelMembers(channelId);
+    //TODO: this was returning the error
+    //fetchChannelMembers(channelId);
     listenToNewMessage(channelId);
     getChannelCreator(channelId);
   }
 
+  //BOTTOM SHEET TO SHOW THREAD OPTIONS
   void showThreadOptions() async {
     await _bottomSheetService.showCustomSheet(
       variant: BottomSheetType.threadOptions,
@@ -180,15 +191,17 @@ class ChannelPageViewModel extends FormViewModel {
     notifyListeners();
   }
 
-  Future<bool> changePinnedState(UserPost? userPost) =>
-      _channelsApiService.changeChannelMessagePinnedState(userPost!.channelId,
+  // FUNCTION TO CHECK THE PINNED STATE OF A MESSAGE
+  Future<bool> changePinnedState(UserPost? userPost) {
+    return _channelsApiService.changeChannelMessagePinnedState(userPost!.channelId,
           userPost.id!, userPost.userId!, !userPost.pinned);
+  }
 
+  // FUNCTION FOR JOIN CHANNEL
   Future joinChannel(String channelId) async {
     String? userId = storage.getString(StorageKeys.currentUserId);
     String? orgId = storage.getString(StorageKeys.currentOrgId);
     String? token = storage.getString(StorageKeys.currentSessionToken);
-    storage.setString(StorageKeys.currentChannelId, channelId);
     // await _channelsApiService.joinChannel(channelId);
     try {
       final res = await _api
@@ -207,6 +220,7 @@ class ChannelPageViewModel extends FormViewModel {
     }
   }
 
+  // FUNCTION TO CHECK A USER ID
   void checkUserId() async {
     await Future.delayed(const Duration(milliseconds: 10));
     _checkUser =
@@ -216,6 +230,7 @@ class ChannelPageViewModel extends FormViewModel {
     notifyListeners();
   }
 
+  // FUNCTION TO CHECK A CHANNEL SOCKET ID
   void getChannelSocketId(String channelId) async {
     final channelSockId =
         await _channelsApiService.getChannelSocketId(channelId);
@@ -223,6 +238,7 @@ class ChannelPageViewModel extends FormViewModel {
     websocketConnect(channelSockId);
   }
 
+  //FUNCTION TO FETCH CHANNEL MEMBERS
   void fetchChannelMembers(String channelId) async {
     channelMembers =
         await _channelsApiService.getChannelMembers(channelId) ?? [];
@@ -240,12 +256,41 @@ class ChannelPageViewModel extends FormViewModel {
     }
   }
 
+  // FUNCTION TO DELETE A CHANNEL
+  Future<void> deleteChannel(ChannelModel channel) async {
+    try {
+      bool res = await _channelsApiService.deleteChannel(
+          _userService.currentOrgId, channel.id);
+      if (res) {
+        snackbar.showCustomSnackBar(
+          duration: const Duration(seconds: 3),
+          variant: SnackbarType.success,
+          message: 'Channels ${channel.name} deleted successful',
+        );
+
+        _navigationService.back();
+      } else {
+        snackbar.showCustomSnackBar(
+          duration: const Duration(seconds: 3),
+          variant: SnackbarType.failure,
+          message: DeleteOrgError,
+        );
+      }
+    } catch (e) {
+      snackbar.showCustomSnackBar(
+        duration: const Duration(seconds: 3),
+        variant: SnackbarType.failure,
+        message: e.toString(),
+      );
+    }
+  }
+
+  // FUNCTION TO FETCH MESSAGES
   void fetchMessages(String channelId) async {
     List? channelMessages =
         await _channelsApiService.getChannelMessages(channelId);
     channelUserMessages = [];
 
-    inspect(channelMessages.toString());
     log.wtf(channelMessages[0].toString());
 
     channelMessages.forEach((data) async {
@@ -254,7 +299,8 @@ class ChannelPageViewModel extends FormViewModel {
       channelUserMessages?.add(
         UserPost(
           id: data['_id'],
-          displayName: userid,
+          displayName:
+              _userService.userId == userid ? _userService.userEmail : userid,
           statusIcon: '⭐',
           moment: Moment.now().from(DateTime.parse(data['timestamp'])),
           message: messageEventCheck(data),
@@ -281,45 +327,58 @@ class ChannelPageViewModel extends FormViewModel {
     notifyListeners();
   }
 
-  sendOrUpdateMessage(String message, [List<File>? media]) async {
-    // String? userId = storage.getString(StorageKeys.currentUserId);
-    // String? messageId = channelUserMessages![index].id;
-    if (isEdited == false) {
-      try {
-        String? userId = storage.getString(StorageKeys.currentUserId);
-        List<String> urls = [];
-        if (media != null) {
-          for (int i = 0; i < media.length; i++) {
-            var url = await _mediaService.uploadImage(media[i], pluginId);
-            urls.add(url!);
-          }
+  // sendOrUpdateMessage(String message, [List<File>? media]) async {
+  //   // String? userId = storage.getString(StorageKeys.currentUserId);
+  //   // String? messageId = channelUserMessages![index].id;
+  //   if (isEdited == false) {
+  //     try {
+  //       String? userId = storage.getString(StorageKeys.currentUserId);
+  //       List<String> urls = [];
+  //       if (media != null) {
+  //         for (int i = 0; i < media.length; i++) {
+  //           var url = await _mediaService.uploadImage(media[i], pluginId);
+  //           urls.add(url!);
+  //         }
+  // FUNCTION TO DELETE A MESSAGE
+  void deleteMessage(String channelId, String messageId) async {
+    String? userId = storage.getString(StorageKeys.currentUserId);
+    String? orgId = storage.getString(StorageKeys.currentOrgId);
+    await _channelsApiService.deleteChannelMessage(
+        orgId!, channelId, messageId, userId!);
+
+    fetchMessages(channelId);
+    scrollController.jumpTo(scrollController.position.minScrollExtent);
+    _navigationService.back();
+    notifyListeners();
+  }
+
+  //FUNCTION TO SEND A MESSAGE - BOTH TEXT AND MEDIA
+  void sendMessage(String message, [List<File>? media]) async {
+    try {
+      String? userId = storage.getString(StorageKeys.currentUserId);
+      List<String> urls = [];
+      if (media != null) {
+        for (int i = 0; i < media.length; i++) {
+          var url = await _mediaService.uploadImage(media[i], pluginId);
+          urls.add(url!);
         }
 
         await _channelsApiService.sendChannelMessages(
             channelID, "$userId", message, urls);
-
-        scrollController.jumpTo(scrollController.position.minScrollExtent);
-
-        notifyListeners();
-      } catch (e) {
-        _snackbarService.showCustomSnackBar(
-          duration: const Duration(seconds: 1),
-          message: "Could not send message, please check your internet",
-          variant: SnackbarType.failure,
-        );
       }
-    } else {
-      // TODO: Implement update channel endpoint here, check in channel service API and correct endpoint as required
-      // await _channelsApiService.updateChannelMessages(
-      //   message,
-      //   "616b5b18d73c740b1cef48e5",
-      // );
-      log.i('Is Edited : $isEdited');
-      isEdited = false;
-    }
+      scrollController.jumpTo(scrollController.position.minScrollExtent);
+      fetchChannelMembers(channelID);
+      notifyListeners();
+    } catch (e) {
+      _snackbarService.showCustomSnackBar(
+        duration: const Duration(seconds: 1),
+        message: "Could not send message, please check your internet",
+        variant: SnackbarType.failure,
+      );
     notifyListeners();
     scrollController.jumpTo(scrollController.position.minScrollExtent);
     notifyListeners();
+  }
   }
 
   // void sendMessage(String message, [List<File>? media]) async {
@@ -355,7 +414,7 @@ class ChannelPageViewModel extends FormViewModel {
     var newMessage = result['message'];
     var sharedMessage = result['sharedMessage'];
     var message = '$newMessage: $sharedMessage';
-    sendOrUpdateMessage(message);
+    //sendOrUpdateMessage(message);
     _navigationService.back();
   }
 
@@ -408,6 +467,21 @@ class ChannelPageViewModel extends FormViewModel {
     await _centrifugeService.subscribe(channelSocketId);
   }
 
+  // FUNCTION TO LISTEM TO NEW MESSAGES
+  void listenToNewMessage(String channelId) async {
+    String channelSockId =
+        await _channelsApiService.getChannelSocketId(channelId);
+
+    messageSubscription = _centrifugeService.listen(
+      socketId: channelSockId,
+      channelId: channelId,
+      onData: (message) {
+        fetchMessages(channelId);
+        notifyListeners();
+      },
+    );
+  }
+
   void showNotificationForOtherChannels(
       String channelId, String channelName) async {
     notificationSubscription = _centrifugeService.onNotificationReceived(
@@ -426,6 +500,7 @@ class ChannelPageViewModel extends FormViewModel {
     );
   }
 
+  //  A DISPOSE FUNCTION
   @override
   void dispose() {
     // this fixes the scroll controller error
@@ -434,11 +509,18 @@ class ChannelPageViewModel extends FormViewModel {
     super.dispose();
   }
 
+
   void toggleExpanded() {
     isExpanded = !isExpanded;
     notifyListeners();
   }
 
+  @override
+  void setFormStatus() {
+    // TODO: implement setFormStatus
+  }
+
+  // FUNCTION TO SHCEDULE A MESSAGE
   void scheduleMessage(double delay, String text, String channelID) async {
     delay = delay * 60; //Converting from hour to minutes
 
@@ -450,23 +532,8 @@ class ChannelPageViewModel extends FormViewModel {
       notifyListeners();
     });
   }
-
-  @override
-  void setFormStatus() {
-    // TODO: implement setFormStatus
+    
   }
 
-  void listenToNewMessage(String channelId) async {
-    String channelSockId =
-        await _channelsApiService.getChannelSocketId(channelId);
 
-    messageSubscription = _centrifugeService.listen(
-      socketId: channelSockId,
-      channelId: channelId,
-      onData: (message) {
-        fetchMessages(channelId);
-        notifyListeners();
-      },
-    );
-  }
-}
+  

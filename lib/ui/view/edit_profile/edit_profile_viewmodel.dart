@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:zurichat/app/app.locator.dart';
-import 'package:zurichat/constants/app_strings.dart';
+import 'package:zurichat/utilities/constants/app_strings.dart';
 import 'package:zurichat/models/user_model.dart';
-import 'package:zurichat/package/base/server-request/api/zuri_api.dart';
-import 'package:zurichat/services/media_service.dart';
-import 'package:zurichat/services/user_service.dart';
-import 'package:zurichat/utilities/constants.dart';
+import 'package:zurichat/utilities/api_handlers/zuri_api.dart';
+import 'package:zurichat/services/app_services/media_service.dart';
+import 'package:zurichat/services/in_review/user_service.dart';
+import 'package:zurichat/utilities/constants/app_constants.dart';
 import 'package:zurichat/utilities/enums.dart';
 import 'package:zurichat/utilities/mixins/validators_mixin.dart';
 import 'package:stacked/stacked.dart';
@@ -32,6 +32,8 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
   String imageUrl = '';
   File? imageFile;
 
+  bool isSaving = false;
+
   void navigateBack() {
     _navigationService.back();
   }
@@ -47,7 +49,8 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
 
   void setState() => notifyListeners();
 
-  void onChanged({String? disp, String? bo, String? phn, String? name, File? file}) {
+  void onChanged(
+      {String? disp, String? bo, String? phn, String? name, File? file}) {
     {
       if (disp != null) displayName = disp;
       if (bo != null) bio = bo;
@@ -58,12 +61,12 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
     }
   }
 
-  Future<UserModel> updateData() async{
+  Future<UserModel> updateData() async {
     if (validateNotEmptyField(fullName) != null) {
       _snackbarService.showCustomSnackBar(
           message: 'Fullname cannot be null', variant: SnackbarType.failure);
     }
-    if(imageFile != null){
+    if (imageFile != null) {
       imageUrl = await uploadPic();
     }
     fullName = fullName.trim();
@@ -82,21 +85,24 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
   Future<void> onSave() async {
     if (!hasDataChanged) {
       close();
-    }
-    updateData();
-    final res = await _zuriApi.patch(
-      'organizations/$orgId/members/$userId/profile',
-      body: userModel.toMap(),
-      token: token,
-    );
-    if (res?.statusCode == 200) {
-      _snackbarService.showCustomSnackBar(
-          message: profileUpdated, variant: SnackbarType.success);
-      _userService.setUserDetails(userModel);
-      close();
     } else {
-      _snackbarService.showCustomSnackBar(
-          message: errorOccurred, variant: SnackbarType.failure);
+      updateData();
+      isSaving = true;
+      notifyListeners();
+      final res = await _zuriApi.patch(
+        'organizations/$orgId/members/$userId/profile',
+        body: userModel.toMap(),
+        token: token,
+      );
+      if (res?.statusCode == 200) {
+        _snackbarService.showCustomSnackBar(
+            message: profileUpdated, variant: SnackbarType.success);
+        _userService.setUserDetails(userModel);
+        close();
+      } else {
+        _snackbarService.showCustomSnackBar(
+            message: errorOccurred, variant: SnackbarType.failure);
+      }
     }
   }
 
@@ -110,9 +116,8 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
     if (displayName != userModel.displayName ||
         bio != userModel.bio ||
         phone != userModel.phoneNumber ||
-        (fullName.isNotEmpty && fullName != userModel.fullName ) ||
-        imageFile != null
-    ) {
+        (fullName.isNotEmpty && fullName != userModel.fullName) ||
+        imageFile != null) {
       return true;
     } else {
       return false;
@@ -126,16 +131,20 @@ class EditProfileViewModel extends BaseViewModel with ValidatorMixin {
     );
 
     log.i('confirmationResponse confirmed: ${sheetResponse?.confirmed}');
-    if(sheetResponse != null){
-      imageFile = await mediaService.getImage(fromGallery: sheetResponse.confirmed);
+    if (sheetResponse != null) {
+      imageFile =
+          await mediaService.getImage(fromGallery: sheetResponse.confirmed);
       notifyListeners();
     }
   }
 
   //TODO-- fix the plugIn parameter needed to upload user profile pic to the endpoint
-  Future<String> uploadPic() async{
-    imageUrl = (await mediaService.uploadImage(imageFile,'6165f520375a4616090b8275'))!;
+  Future<String> uploadPic() async {
+    imageUrl = (await mediaService.uploadImage(
+      imageFile,
+      //TODO MOVE PLUGIN ID TO CONSTANTS
+      '6165f520375a4616090b8275',
+    ))!;
     return imageUrl;
   }
-
 }
